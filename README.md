@@ -40,31 +40,40 @@ MULTIMODAL_MODEL=支持图像输入的模型名称
 
 密钥只放在本机 .env，不要提交到 Git。即使两个 API 来自同一家服务，也分别配置；如果暂时没有多模态模型，程序会在视觉提取失败时提示并继续处理可提取文本。
 
-## 运行
+## 运行：招标文件、合同与公示三方比对
 
-审核单个文件：
-
-```bash
-python scripts/contract_agent.py "D:/合同材料/合同.pdf" --out "D:/审核结果"
-```
-
-审核一个目录内所有 PDF/DOCX/TXT：
+默认在当前工作目录下读取 `招标文件.pdf` 和 `合同.pdf`，并且必须提供公示 HTML URL 或本地 HTML 文件：
 
 ```bash
-python scripts/contract_agent.py "D:/合同材料" --out "D:/审核结果"
+python scripts/contract_agent.py --notice "https://example.com/public-notice.html"
 ```
 
-断点续跑：
+默认输出到当前目录的 `./output`。可指定文件路径或可直接下载的 HTTP(S) URL：
 
 ```bash
-python scripts/contract_agent.py "D:/合同材料" --out "D:/审核结果" --resume
+python scripts/contract_agent.py --tender "D:/项目/招标文件.pdf" --contract "D:/项目/合同.pdf" --notice "https://example.com/public-notice.html" --out "D:/审核结果"
 ```
 
-跳过本地隐私与空白初筛：
+也可以把招标文件和合同放在当前目录，使用默认文件名；公示参数 `--notice` 必填：
 
 ```bash
-python scripts/contract_agent.py "D:/合同材料" --no-scan
+python scripts/contract_agent.py --notice "D:/项目/中标结果公示.html"
 ```
+
+支持的输入：
+- `--tender`：本地 PDF/DOCX/TXT，或可直接下载的 HTTP(S) 文件 URL；默认 `./招标文件.pdf`。
+- `--contract`：本地 PDF/DOCX/TXT，或可直接下载的 HTTP(S) 文件 URL；默认 `./合同.pdf`。
+- `--notice`：必填。可访问的 HTML 公示网页 URL，或本地 HTML/HTM/TXT 文件。
+- `--out`：输出目录，默认 `./output`。
+
+断点续跑和跳过本地初筛：
+
+```bash
+python scripts/contract_agent.py --notice "https://example.com/public-notice.html" --resume
+python scripts/contract_agent.py --notice "https://example.com/public-notice.html" --no-scan
+```
+
+公示网页会通过普通 HTTP 请求提取可见文本；如果网页需要登录、触发反爬或依赖 JavaScript 动态渲染，程序会报错提示无法完整读取。程序不会绕过访问控制。远程下载文件会暂存到输出目录下的 `.inputs/`。
 
 ## 输出文件
 
@@ -84,6 +93,6 @@ python scripts/contract_agent.py "D:/合同材料" --no-scan
 
 - 扫描版 PDF 的视觉识别仅处理文本层较少的页面，最多识别前 30 页（可通过 VISION_MAX_PAGES 调整）；未配置多模态 API 时，扫描页可能无法识别。
 - DOCX 使用段落/表格位置，不编造 PDF 页码。旧版 DOC 需先转为 DOCX 或 PDF。
-- 程序不自动联网检索中标公示；需将公示材料一并放入输入目录。
+- 程序会读取 `--notice` 指定的公示 HTML 网页或本地 HTML/HTM/TXT 文件；需要登录、反爬或 JavaScript 渲染的页面可能无法读取。
 - AI 输出不是法律意见。请人工复核金额、期限、付款、担保、违约责任、争议解决、主体冲突及所有高风险结论。
 - 本地脱敏是常见模式的启发式处理，不能保证识别所有个人信息；提交远程 API 前仍应遵守组织的数据处理要求。
