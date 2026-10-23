@@ -322,7 +322,7 @@ def make_client(prefix: str):
 
 def log_remote_ai_call(kind, model, system_prompt, user_prompt):
     """打印远程 AI 调用的模型名与提示词；不打印图片 base64。"""
-    print("\\n"+"="*24+f" 远程 AI 调用：{kind} "+"="*24, flush=True)
+    print("\n"+"="*24+f" 远程 AI 调用：{kind} "+"="*24, flush=True)
     print(f"[模型名] {model}", flush=True)
     print("[System Prompt]", flush=True)
     print(system_prompt, flush=True)
@@ -416,19 +416,19 @@ def run_scanner(path,out_dir,vision_client=None,vision_model=None):
             for item in image_pages
             for check in item.get("signature_seal_checks",[])
         ]
-        report += "\\n\\n## 多模态签字/盖章初筛\\n"
+        report += "\n\n## 多模态签字/盖章初筛\n"
         if signature_checks:
             report += "| 页码 | 签署项/盖章项 | 状态 | 可见证据 |\\n|---:|---|---|---|\\n"
             for check in signature_checks:
                 cells=[str(check.get("page","")),str(check.get("item","未说明")),str(check.get("status","无法判断")),str(check.get("evidence","未提供"))]
-                report += "| "+" | ".join(x.replace("|","\\\\|").replace("\\n"," ") for x in cells)+" |\\n"
-            report += "\\n> 图像识别只作初筛；印章颜色、真伪、签名人身份及法律效力必须人工核验。\\n"
+                report += "| "+" | ".join(x.replace("|","\\\\|").replace("\n"," ") for x in cells)+" |\\n"
+            report += "\n> 图像识别只作初筛；印章颜色、真伪、签名人身份及法律效力必须人工核验。\n"
         else:
-            report += "\\n- 未从已扫描页面获得可用的签字/盖章识别结果。若相关页面未纳入扫描范围，不能据此认定未签或未盖章。\\n"
+            report += "\n- 未从已扫描页面获得可用的签字/盖章识别结果。若相关页面未纳入扫描范围，不能据此认定未签或未盖章。\n"
         if path.suffix.lower()==".pdf" and vision_client is None:
-            report += "\\n\\n> 提示：未配置多模态 API，报告只覆盖 PDF 文本层，图片中的隐私信息可能漏检。\\n"
+            report += "\n\n> 提示：未配置多模态 API，报告只覆盖 PDF 文本层，图片中的隐私信息可能漏检。\n"
         elif image_pages:
-            report += f"\\n\\n> 多模态 OCR 已检查 {len(image_pages)} 个含图片或文本层不足的页面；OCR 可能漏识别，仍需人工复核。\\n"
+            report += f"\n\n> 多模态 OCR 已检查 {len(image_pages)} 个含图片或文本层不足的页面；OCR 可能漏识别，仍需人工复核。\n"
         (folder/name).write_text(report,encoding="utf-8")
         return {"source":path.name,"report":name,"privacy_count":len(privacy),"blank_count":len(blanks),
         "image_pages_scanned":len(image_pages),
