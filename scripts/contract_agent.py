@@ -437,6 +437,101 @@ def run_scanner(path,out_dir,vision_client=None,vision_model=None):
     except Exception as e:
         return {"source":path.name,"report":"扫描失败","privacy_count":0,"blank_count":0,"blanks":[],"error":str(e)}
 
+def markdown_to_html(markdown: str) -> str:
+    """用标准库将本程序生成的 Markdown 报告转换为可离线打开的 HTML。"""
+    import html
+    lines = markdown.splitlines()
+    rendered = []
+    paragraph = []
+    in_list = False
+    in_table = False
+
+    def inline(text):
+        escaped = html.escape(text, quote=True)
+        escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+        return escaped
+
+    def flush_paragraph():
+        nonlocal paragraph
+        if paragraph:
+            rendered.append("<p>" + inline(" ".join(paragraph)) + "</p>")
+            paragraph = []
+
+    def close_list():
+        nonlocal in_list
+        if in_list:
+            rendered.append("</ul>")
+            in_list = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("|") and stripped.endswith("|"):
+            flush_paragraph()
+            close_list()
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            if all(re.fullmatch(r":?-{3,}:?", cell.replace(" ", "")) for cell in cells):
+                continue
+            tag = "th" if not in_table else "td"
+            if not in_table:
+                rendered.append('<table class="report-table">')
+                in_table = True
+                tag = "th"
+            rendered.append("<tr>" + "".join(f"<{tag}>{inline(cell.replace(chr(92) + '|', '|'))}</{tag}>" for cell in cells) + "</tr>")
+            continue
+        if in_table:
+            rendered.append("</table>")
+            in_table = False
+        if not stripped:
+            flush_paragraph()
+            close_list()
+            continue
+        if stripped.startswith("#"):
+            flush_paragraph()
+            close_list()
+            level = min(len(stripped) - len(stripped.lstrip("#")), 4)
+            title = stripped[level:].strip()
+            rendered.append(f"<h{level}>{inline(title)}</h{level}>")
+        elif stripped.startswith(">"):
+            flush_paragraph()
+            close_list()
+            rendered.append(f'<blockquote>{inline(stripped.lstrip("> "))}</blockquote>')
+        elif re.match(r"^[-*]\s+", stripped):
+            flush_paragraph()
+            if not in_list:
+                rendered.append("<ul>")
+                in_list = True
+            rendered.append("<li>" + inline(re.sub(r"^[-*]\s+", "", stripped)) + "</li>")
+        else:
+            close_list()
+            paragraph.append(stripped)
+    flush_paragraph()
+    close_list()
+    if in_table:
+        rendered.append("</table>")
+    body = "\n".join(rendered)
+    return """<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>招标合同审核总报告</title>
+<style>
+:root{color-scheme:light;--ink:#202733;--muted:#5b6573;--line:#d8dee8;--head:#edf2f8}
+*{box-sizing:border-box}body{margin:0;background:#f4f6f9;color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+main{max-width:1180px;margin:28px auto;padding:32px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 4px 20px #1720330d}
+h1,h2,h3,h4{line-height:1.35;margin-top:1.6em}h1{margin-top:0;font-size:1.8rem}h2{border-bottom:1px solid var(--line);padding-bottom:.4em}h3{font-size:1.15rem}
+p,li,blockquote{overflow-wrap:anywhere}blockquote{margin:1em 0;padding:.7em 1em;border-left:4px solid #98a7bc;background:#f6f8fb;color:var(--muted)}
+.report-table{width:100%;border-collapse:collapse;margin:1em 0;font-size:.94rem;display:block;overflow-x:auto}
+.report-table th,.report-table td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;min-width:100px}
+.report-table th{background:var(--head);font-weight:650}
+@media(max-width:700px){main{margin:0;padding:18px;border:0;border-radius:0}body{font-size:15px}h1{font-size:1.5rem}}
+@media print{body{background:#fff}main{max-width:none;margin:0;padding:0;border:0;box-shadow:none}}
+</style>
+</head><body><main>
+""" + body + """
+</main></body></html>
+"""
+
 def write_report(out_dir,results,cross,scans):
     out=["# 招标合同审核总报告","","> 本报告由自动化程序和 AI 辅助生成，不构成法律意见；高风险及不确定结论必须人工复核。","","## 1. 审核范围"]
     out += [f"- {r['source']}：已处理" for r in results]
@@ -468,7 +563,9 @@ def write_report(out_dir,results,cross,scans):
             any_blank=True; cells=[s["source"],item.get("location",""),item.get("category",""),item.get("evidence",""),item.get("risk","待复核"),"结合上下文人工确认是否必填"]
             out.append("| "+" | ".join(str(x).replace("|","\\|").replace("\n"," ") for x in cells)+" |")
     if not any_blank: out.append("| — | — | 未发现扫描候选项 | 不代表绝对不存在空白字段 | 待复核 | 结合原始页面人工确认 |")
-    (out_dir/"report.md").write_text("\n".join(out)+"\n",encoding="utf-8")
+    markdown = "\n".join(out) + "\n"
+    (out_dir/"report.md").write_text(markdown,encoding="utf-8")
+    (out_dir/"report.html").write_text(markdown_to_html(markdown),encoding="utf-8")
 
 def main():
     ap=argparse.ArgumentParser(description="招标文件、合同与中标公示三方比对 Agent")
@@ -539,7 +636,8 @@ def main():
     cross=cross_compare(results,text_client,text_model)
     (out/"fields_and_findings.json").write_text(json.dumps({"documents":results,"cross_file_review":cross},ensure_ascii=False,indent=2),encoding="utf-8")
     write_report(out,results,cross,scans)
-    print(f"[完成] 报告：{out/'report.md'}")
+    print(f"[完成] HTML 报告：{out/'report.html'}")
+    print(f"[完成] Markdown 备份：{out/'report.md'}")
     print(f"[完成] 结构化结果：{out/'fields_and_findings.json'}")
     return 0
 
