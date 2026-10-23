@@ -328,18 +328,18 @@ def make_client(prefix: str):
     return OpenAI(api_key=key,base_url=base,timeout=float(os.getenv("API_TIMEOUT","120")),max_retries=0),model
 
 def log_remote_ai_call(kind, model, system_prompt, user_prompt):
-    """打印远程 AI 调用的模型名与提示词；每段提示词最多打印前 200 个字符。"""
+    """打印远程 AI 调用的模型名与提示词；每段提示词最多打印前 600 个字符。"""
     def preview(value):
         value = str(value or "")
-        if len(value) <= 200:
+        if len(value) <= 600:
             return value
-        return value[:200] + "...（已截断，原长 {} 字符）".format(len(value))
+        return value[:600] + "...（已截断，原长 {} 字符）".format(len(value))
 
     print("\\n"+"="*24+f" 远程 AI 调用：{kind} "+"="*24, flush=True)
     print(f"[模型名] {model}", flush=True)
-    print("[System Prompt 前200字符]", flush=True)
+    print("[System Prompt 前600字符]", flush=True)
     print(preview(system_prompt), flush=True)
-    print("[User Prompt 前200字符]", flush=True)
+    print("[User Prompt 前600字符]", flush=True)
     print(preview(user_prompt), flush=True)
     print("="*72, flush=True)
 
