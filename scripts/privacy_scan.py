@@ -227,6 +227,8 @@ def main():
     if args.export_text:
         export_text(lines, path, Path(args.export_text))
         print(f"条款分析 TXT 已写入：{args.export_text}")
+        if not args.out:
+            return
     privacy=scan_privacy(lines) if args.mode in ("all","privacy") else []
     blanks=scan_blanks(lines) if args.mode in ("all","blanks") else []
     tender=tender_blank_compare(Path(args.tender),blanks) if args.tender and blanks else []
