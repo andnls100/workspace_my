@@ -133,7 +133,8 @@ def scan_pdf_images_for_privacy(path: Path, client, model) -> list[dict[str, Any
             text=page.get_text("text") or ""
             has_image=bool(page.get_images(full=True))
             weak_text=len(re.sub(r"\s","",text))<80
-            if has_image or weak_text:
+            has_signing_terms=bool(re.search(r"签字|签名|盖章|公章|法定代表人|授权代表|签署日期|签订日期",text))
+            if has_image or weak_text or has_signing_terms:
                 candidates.append((i,page))
         if len(candidates)>max_pages:
             print(f"[隐私扫描提示] {path.name} 有 {len(candidates)} 个候选页面，受 VISION_MAX_PAGES={max_pages} 限制，仅扫描前 {max_pages} 页。", file=sys.stderr)
