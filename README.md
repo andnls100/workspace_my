@@ -6,7 +6,7 @@
 
 - 独立运行：不依赖 Codex、豆包或其他工作目录；可以从任意目录调用 Python 程序。
 - 本地 Python 文本提取：使用 PyMuPDF 提取 PDF 文本、使用 python-docx 提取 DOCX 段落和表格；招标文件的合同条款章节由 Python 规则定位并单独导出，不调用 AI。
-- 本地隐私初筛：手机号、身份证号、QQ 号及疑似银行账号等候选信息在本地扫描；发给远程 AI 的文本会先尝试脱敏。
+- 隐私初筛：文本层中的手机号、身份证号、QQ 号及疑似银行账号由本地 Python 规则识别；PDF 中含嵌入图片或文本层不足的页面可用多模态模型 OCR 后再扫描。多模态识别会将页面图像发送到配置的 API，可能仍有漏检。
 - 字段与证据复用：提取结果保存为 JSON，内部错误和跨文件比对复用字段结果。
 - 断点续跑：通过 --resume 复用输入文件未变化时的分析结果。
 - 输出：总报告 report.md、结构化结果 fields_and_findings.json、每份原始文件的初筛报告 scans/。
@@ -32,6 +32,12 @@ pip install -r requirements.txt
 TEXT_API_KEY=你的文本API密钥
 TEXT_BASE_URL=https://api.openai.com/v1
 TEXT_MODEL=你的文本模型名称
+
+# 图片 OCR / 隐私扫描（可选；未配置则只扫描文本层）
+MULTIMODAL_API_KEY=你的多模态API密钥
+MULTIMODAL_BASE_URL=https://api.openai.com/v1
+MULTIMODAL_MODEL=支持图像输入的模型名称
+VISION_MAX_PAGES=30
 ```
 
 密钥只放在本机 .env，不要提交到 Git。
@@ -86,7 +92,7 @@ python scripts/contract_agent.py --notice "https://example.com/public-notice.htm
 
 ## 限制
 
-- PDF/DOCX/TXT 的文本转换使用本地 Python 库。扫描版 PDF 若没有可搜索文本层，不会调用 AI 视觉识别，程序会提示页面文本可能缺失；需要先使用本地 OCR 软件将文件转成可搜索 PDF。
+- 招标合同条款定位和 PDF/DOCX/TXT 文本层提取使用本地 Python。对于含图片或文本层不足的 PDF 页面，若配置多模态 API，程序会对最多 `VISION_MAX_PAGES` 页进行图像 OCR，并将识别文本纳入隐私规则扫描；未配置时会提示图片隐私可能漏检。页面图像会发送给多模态服务商；如不能外传，应关闭该 API 并使用本地 OCR。
 - DOCX 使用段落/表格位置，不编造 PDF 页码。旧版 DOC 需先转为 DOCX 或 PDF。
 - 程序会读取 `--notice` 指定的公示 HTML 网页或本地 HTML/HTM/TXT 文件；需要登录、反爬或 JavaScript 渲染的页面可能无法读取。
 - AI 输出不是法律意见。请人工复核金额、期限、付款、担保、违约责任、争议解决、主体冲突及所有高风险结论。
