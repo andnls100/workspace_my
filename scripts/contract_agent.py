@@ -110,7 +110,7 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
         raise RuntimeError(f"无法下载地址 {url}：{exc}") from exc
 
 def _filename_from_response(url: str, content_disposition: str, content_type: str, default: str) -> str:
-    match = re.search(r'filename\\*?=(?:UTF-8\\'\\'|")?([^";]+)', content_disposition, re.I)
+    match = re.search(r"filename\\*?=(?:UTF-8''|\"?)([^\";]+)", content_disposition, re.I)
     candidate = urllib.parse.unquote(match.group(1).strip().strip('"')) if match else Path(urllib.parse.urlparse(url).path).name
     suffix = Path(candidate).suffix.lower()
     if suffix not in SUPPORTED:
