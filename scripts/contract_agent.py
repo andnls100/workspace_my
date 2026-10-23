@@ -175,7 +175,7 @@ def scan_pdf_images_for_privacy(path: Path, client, model) -> list[dict[str, Any
                 data=json.loads(raw)
                 visible=str(data.get("visible_text","")).strip()
                 checks=data.get("signature_seal_checks",[])
-                if visible or isinstance(checks,list) and checks:
+                if visible or isinstance(checks,list) and checks or isinstance(data.get("document_findings"),list) and data.get("document_findings"):
                     found.append({
                         "page":index+1,
                         "text":visible,
