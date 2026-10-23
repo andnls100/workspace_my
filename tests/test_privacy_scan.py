@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from pathlib import Path
 import sys
@@ -31,4 +32,21 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(len(got),1)
         self.assertEqual(got[0].category,"未选方框（待核实）")
 
-if __name__ == "__main__": unittest.main()
+    def test_docx_formatted_underline_whitespace(self):
+        try:
+            from docx import Document
+        except ImportError:
+            self.skipTest("python-docx not installed")
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/"blank.docx"
+            doc=Document()
+            p=doc.add_paragraph("合同编号：")
+            run=p.add_run("     ")
+            run.underline=True
+            doc.save(path)
+            lines=ps.read_docx(path)
+            got=ps.scan_blanks(lines)
+            self.assertTrue(any(f.category=="DOCX格式下划线空白" for f in got))
+
+if __name__ == "__main__":
+    unittest.main()
