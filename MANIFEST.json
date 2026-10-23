@@ -1,0 +1,23 @@
+{
+  "name": "tender-contract-audit-skill",
+  "version": "1.2.0",
+  "purpose": "招标条款抽取、一致性审核、隐私扫描、合同空白检测及招标/合同字段交叉核对",
+  "language": "zh-CN",
+  "files": [
+    "SKILL.md",
+    "README.md",
+    "MANIFEST.json",
+    "references/field-checklist.md",
+    "references/report-template.md",
+    "scripts/privacy_scan.py",
+    "tests/test_privacy_scan.py"
+  ],
+  "changes": [
+    "新增 DOCX 下划线格式空白与表格空单元格初筛",
+    "新增可选 PDF 横线版式检测",
+    "增加空白项风险分级、去重和统计",
+    "增加招标文件字段级交叉提示",
+    "加强所有报告摘录的隐私脱敏约束",
+    "增加已填写异常核验规则与测试"
+  ]
+}
