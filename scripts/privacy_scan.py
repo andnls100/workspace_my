@@ -197,6 +197,24 @@ def write_report(path,mode,privacy,blanks,layout,tender):
     out += ["","## 限制与人工复核","- 下划线、空白单元格、未选方框和表单域可能是正常模板格式，不能自动等同于缺陷。","- 签字、盖章、签署日期的空白可能属于正常签署留白。","- PDF 版式线检测会把表格边框/装饰线作为候选，需查看页面图像。","- 招标字段匹配是保守提示，不等同于条款级语义对齐。","- 所有引用上下文必须脱敏；OCR、图片、手写和格式变形可能漏检。"]
     return "\n".join(out)+"\n"
 
+def export_text(lines, source_path: Path, output_path: Path):
+    """导出用于 AI 条款分析的 TXT，并保留可追溯的位置标记。"""
+    ignored = {"[WORD_UNDERLINE_WHITESPACE]", "[EMPTY_TABLE_CELL]", "[DOCX_FORM_FIELD_XML]"}
+    out = [
+        f"来源文件：{source_path.name}",
+        "用途：条款提取、合同内部逻辑检查及跨文件比较。",
+        "说明：PDF 使用实际页码；DOCX 使用段落/表格位置，位置不等同于 PDF 页码。",
+        ""
+    ]
+    for line in lines:
+        if line.text in ignored or not line.text.strip():
+            continue
+        loc = line.location or "位置未标记"
+        page = f"第{line.page}页" if line.page != "未标页" else "页码未知"
+        out.append(f"[{page} | {loc} | {line.source}] {line.text}")
+    output_path.write_text("\\n".join(out) + "\\n", encoding="utf-8")
+
+
 def main():
     ap=argparse.ArgumentParser(description="合同隐私信息与空白项初筛")
     ap.add_argument("file",help="合同文件 PDF/DOCX/TXT/MD")
@@ -204,7 +222,11 @@ def main():
     ap.add_argument("--mode",choices=["all","privacy","blanks"],default="all")
     ap.add_argument("--layout",action="store_true",help="使用可选 pdfplumber 做 PDF 横线初筛")
     ap.add_argument("--tender",help="可选招标文件路径，提供字段级交叉提示")
+    ap.add_argument("--export-text", help="导出用于条款分析的 TXT，并保留页码/段落/表格位置")
     args=ap.parse_args(); path=Path(args.file); lines,layout=read_input(path,args.layout)
+    if args.export_text:
+        export_text(lines, path, Path(args.export_text))
+        print(f"条款分析 TXT 已写入：{args.export_text}")
     privacy=scan_privacy(lines) if args.mode in ("all","privacy") else []
     blanks=scan_blanks(lines) if args.mode in ("all","blanks") else []
     tender=tender_blank_compare(Path(args.tender),blanks) if args.tender and blanks else []

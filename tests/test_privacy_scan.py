@@ -6,6 +6,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import privacy_scan as ps
 
 class ScanTests(unittest.TestCase):
+    def test_export_text_preserves_location(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "sample.pdf"
+            output = Path(tmp) / "sample.txt"
+            lines = [
+                ps.Line("合同金额：100万元", "2", "文本层", "第2页"),
+                ps.Line("[EMPTY_TABLE_CELL]", "2", "DOCX表格层", "表格1第2行第3列"),
+            ]
+            ps.export_text(lines, source, output)
+            content = output.read_text(encoding="utf-8")
+            self.assertIn("第2页", content)
+            self.assertIn("合同金额：100万元", content)
+            self.assertNotIn("[EMPTY_TABLE_CELL]", content)
+
     def test_underscore_placeholder(self):
         got=ps.scan_blanks([ps.Line("合同价款：人民币________元", "2", "文本层", "第2页")])
         self.assertEqual(len(got),1)
