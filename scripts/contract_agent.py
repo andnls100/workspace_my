@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 except ImportError:
     pass
 try:
