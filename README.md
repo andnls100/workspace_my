@@ -5,7 +5,7 @@
 ## 功能
 
 - 独立运行：不依赖 Codex、豆包或其他工作目录；可以从任意目录调用 Python 程序。
-- 双 API 自动分工：文本 API 负责条款分析与跨文件比对；多模态 API 仅在 PDF 页面文本提取很少时尝试识别扫描页。
+- 本地 Python 文本提取：使用 PyMuPDF 提取 PDF 文本、使用 python-docx 提取 DOCX 段落和表格；招标文件的合同条款章节由 Python 规则定位并单独导出，不调用 AI。
 - 本地隐私初筛：手机号、身份证号、QQ 号及疑似银行账号等候选信息在本地扫描；发给远程 AI 的文本会先尝试脱敏。
 - 字段与证据复用：提取结果保存为 JSON，内部错误和跨文件比对复用字段结果。
 - 断点续跑：通过 --resume 复用输入文件未变化时的分析结果。
@@ -26,19 +26,15 @@ pip install -r requirements.txt
 
 ## 配置 API
 
-复制 .env.example 为 .env，分别配置文本和多模态 API。两者都使用 OpenAI SDK 的 Chat Completions 兼容格式；可以使用官方 OpenAI 地址，也可以填写支持兼容接口的服务地址和模型名称。
+复制 .env.example 为 .env，配置用于字段提取、合同内部检查和跨文件比对的文本 API。文档转文本和招标合同条款章节定位均在本地由 Python 完成，不调用 AI。
 
 ```dotenv
 TEXT_API_KEY=你的文本API密钥
 TEXT_BASE_URL=https://api.openai.com/v1
 TEXT_MODEL=你的文本模型名称
-
-MULTIMODAL_API_KEY=你的多模态API密钥
-MULTIMODAL_BASE_URL=https://api.openai.com/v1
-MULTIMODAL_MODEL=支持图像输入的模型名称
 ```
 
-密钥只放在本机 .env，不要提交到 Git。即使两个 API 来自同一家服务，也分别配置；如果暂时没有多模态模型，程序会在视觉提取失败时提示并继续处理可提取文本。
+密钥只放在本机 .env，不要提交到 Git。
 
 ## 运行：招标文件、合同与公示三方比对
 
@@ -90,7 +86,7 @@ python scripts/contract_agent.py --notice "https://example.com/public-notice.htm
 
 ## 限制
 
-- 扫描版 PDF 的视觉识别仅处理文本层较少的页面，最多识别前 30 页（可通过 VISION_MAX_PAGES 调整）；未配置多模态 API 时，扫描页可能无法识别。
+- PDF/DOCX/TXT 的文本转换使用本地 Python 库。扫描版 PDF 若没有可搜索文本层，不会调用 AI 视觉识别，程序会提示页面文本可能缺失；需要先使用本地 OCR 软件将文件转成可搜索 PDF。
 - DOCX 使用段落/表格位置，不编造 PDF 页码。旧版 DOC 需先转为 DOCX 或 PDF。
 - 程序会读取 `--notice` 指定的公示 HTML 网页或本地 HTML/HTM/TXT 文件；需要登录、反爬或 JavaScript 渲染的页面可能无法读取。
 - AI 输出不是法律意见。请人工复核金额、期限、付款、担保、违约责任、争议解决、主体冲突及所有高风险结论。
