@@ -132,7 +132,7 @@ def scan_pdf_images_for_privacy(path: Path, client, model) -> list[dict[str, Any
         for i,page in enumerate(doc):
             text=page.get_text("text") or ""
             has_image=bool(page.get_images(full=True))
-            weak_text=len(re.sub(r"\\s","",text))<80
+            weak_text=len(re.sub(r"\s","",text))<80
             if has_image or weak_text:
                 candidates.append((i,page))
         if len(candidates)>max_pages:
