@@ -114,7 +114,7 @@ def split_chunks(text,size=CHUNK_SIZE):
         if cut<len(text):
             b=text.rfind("\n",0,cut)
             if b>size//2: cut=b
-        result.append(text[:cut]); text=text[cut:].lstrip("\n")
+        result.append(text[:cut]); text=text[cut:]
     return result or [""]
 
 def dedupe(items):
