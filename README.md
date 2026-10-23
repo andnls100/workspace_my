@@ -48,19 +48,19 @@ MULTIMODAL_MODEL=支持图像输入的模型名称
 python scripts/contract_agent.py --notice "https://example.com/public-notice.html"
 ```
 
-默认输出到当前目录的 `./output`。可指定文件路径或可直接下载的 HTTP(S) URL：
+默认输出到当前目录的 `./output`。可指定本地文件路径或可直接下载的 HTTP(S) URL：
 
 ```bash
 python scripts/contract_agent.py --tender "D:/项目/招标文件.pdf" --contract "D:/项目/合同.pdf" --notice "https://example.com/public-notice.html" --out "D:/审核结果"
 ```
 
-也可以把招标文件和合同放在当前目录，使用默认文件名；公示参数 `--notice` 必填：
+如果招标文件和合同已在当前目录且文件名符合默认值，只需提供公示参数：
 
 ```bash
 python scripts/contract_agent.py --notice "D:/项目/中标结果公示.html"
 ```
 
-支持的输入：
+参数说明：
 - `--tender`：本地 PDF/DOCX/TXT，或可直接下载的 HTTP(S) 文件 URL；默认 `./招标文件.pdf`。
 - `--contract`：本地 PDF/DOCX/TXT，或可直接下载的 HTTP(S) 文件 URL；默认 `./合同.pdf`。
 - `--notice`：必填。可访问的 HTML 公示网页 URL，或本地 HTML/HTM/TXT 文件。
@@ -73,8 +73,7 @@ python scripts/contract_agent.py --notice "https://example.com/public-notice.htm
 python scripts/contract_agent.py --notice "https://example.com/public-notice.html" --no-scan
 ```
 
-公示网页会通过普通 HTTP 请求提取可见文本；如果网页需要登录、触发反爬或依赖 JavaScript 动态渲染，程序会报错提示无法完整读取。程序不会绕过访问控制。远程下载文件会暂存到输出目录下的 `.inputs/`。
-
+公示网页通过普通 HTTP 请求提取可见文本；如果网页需要登录、触发反爬或依赖 JavaScript 动态渲染，程序可能无法完整读取。程序不会绕过访问控制。远程下载文件会暂存到输出目录下的 `.inputs/`。
 ## 输出文件
 
 - report.md：关键字段、合同内部错误、跨文件比对、隐私与空白初筛，以及最后一章“合同未填写及缺失信息清单”。
