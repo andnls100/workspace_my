@@ -396,8 +396,11 @@ def main():
             result=cached["result"]; print("  [缓存] 文件未变化，复用分析结果")
         else:
             if key == str(tender.resolve()):
-                print("  [纯 Python] 正在提取 PDF 文本并定位合同条款章节")
-                full_text=extract_pdf_text(path)
+                print("  [纯 Python] 正在提取文档文本并定位合同条款章节")
+                if path.suffix.lower()==".pdf":
+                    full_text=extract_pdf_text(path)
+                else:
+                    full_text,_=read_document(path)
                 text=extract_contract_section(full_text)
                 section_path=input_dir/"招标文件_合同条款.txt"
                 section_path.write_text(text+"\n",encoding="utf-8")
