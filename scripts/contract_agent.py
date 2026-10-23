@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Portable CLI agent for tender/contract review. AI output is advisory and requires human review."""
 from __future__ import annotations
-import argparse, base64, hashlib, json, os, re, sys, time, urllib.request, urllib.parse
+import argparse, hashlib, json, os, re, sys, time, urllib.request, urllib.parse
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -38,7 +38,81 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda:f.read(1024*1024),b""): h.update(block)
     return h.hexdigest()
 
+CHAPTER_PATTERN = re.compile(
+    r"^\s*第\s*([一二三四五六七八九十百千万零〇两\d]+)\s*章\s*(.*?)\s*$"
+)
+
+def extract_pdf_text(pdf_path: Path) -> str:
+    """使用本地 PyMuPDF 将 PDF 转为文本，不调用 AI。"""
+    try:
+        import fitz
+    except ImportError as exc:
+        raise RuntimeError("缺少 PyMuPDF，请运行 pip install -r requirements.txt") from exc
+    try:
+        document = fitz.open(str(pdf_path))
+    except Exception as exc:
+        raise RuntimeError(f"PDF 打开失败：{pdf_path}：{exc}") from exc
+    try:
+        pages = [page.get_text("text") or "" for page in document]
+    finally:
+        document.close()
+    text = "\n".join(pages).replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\n{4,}", "\n\n", text).strip()
+    if not text:
+        raise RuntimeError(f"PDF 未提取到文字：{pdf_path}。如果是扫描件，需要先使用本地 OCR 转成可搜索 PDF。")
+    return text
+
+def find_all_chapters(text: str) -> list[dict[str, Any]]:
+    """识别一级“第X章”标题，并标记目录中的章节行。"""
+    chapters = []
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        match = CHAPTER_PATTERN.match(stripped)
+        if match:
+            title = f"第{match.group(1)}章 {match.group(2).strip()}".strip()
+            toc = bool(
+                re.search(r"\.{3,}|…{2,}|合同条款\s*\d{1,4}$", stripped)
+                or re.search(r"\s\d{1,4}\s*$", stripped)
+            )
+            chapters.append({
+                "number": match.group(1),
+                "title": title,
+                "start": offset,
+                "toc": toc,
+            })
+        offset += len(line)
+    return chapters
+
+def extract_contract_section(text: str) -> str:
+    """参照 checkht 的 STEP1 章节定位方式，纯 Python 截取招标文件中的合同条款章节。"""
+    chapters = find_all_chapters(text)
+    candidates = []
+    for index, chapter in enumerate(chapters):
+        if "合同条款" not in chapter["title"]:
+            continue
+        end = chapters[index + 1]["start"] if index + 1 < len(chapters) else len(text)
+        item = dict(chapter)
+        item["end"] = end
+        item["length"] = end - chapter["start"]
+        candidates.append(item)
+    if not candidates:
+        found = "\n".join(item["title"] for item in chapters) or "未识别到“第X章”格式的一级章节标题"
+        raise RuntimeError("招标文件中没有找到“第X章 合同条款”章节。识别到的一级章节：\n" + found)
+    preferred = [item for item in candidates if not item["toc"] and item["length"] >= 5000]
+    if not preferred:
+        preferred = [item for item in candidates if not item["toc"]] or candidates
+    selected = max(preferred, key=lambda item: item["length"])
+    section = text[selected["start"]:selected["end"]].strip()
+    if not section:
+        raise RuntimeError("识别到合同条款章节，但截取结果为空。")
+    print(f"[纯 Python] 识别到 {len(candidates)} 个合同条款章节，选择“{selected['title']}”，共 {len(section)} 字符")
+    if len(section) < 5000:
+        print("[提示] 截取的合同条款少于 5000 字符，请核对章节边界和原始 PDF。")
+    return section
+
 def read_document(path: Path) -> tuple[str,list[dict[str,Any]]]:
+    """用 Python 库提取 TXT、DOCX、PDF 文本；不调用 AI 或远程 OCR。"""
     ext=path.suffix.lower()
     if ext==".txt":
         return "\n".join(f"[第{i}行] {s}" for i,s in enumerate(path.read_text(encoding="utf-8",errors="replace").splitlines(),1)),[]
@@ -57,13 +131,18 @@ def read_document(path: Path) -> tuple[str,list[dict[str,Any]]]:
                         if cell.text.strip(): lines.append(f"[表格 {ti} 第{ri}行第{ci}列] {cell.text}")
         return "\n".join(lines),[]
     if ext==".pdf":
-        try: from pypdf import PdfReader
-        except ImportError as e: raise RuntimeError("缺少 pypdf，请运行 pip install -r requirements.txt") from e
+        try: import fitz
+        except ImportError as e: raise RuntimeError("缺少 PyMuPDF，请运行 pip install -r requirements.txt") from e
         pages=[]; scan=[]
-        for i,page in enumerate(PdfReader(str(path)).pages,1):
-            txt=page.extract_text() or ""
-            pages.append(f"[PDF第{i}页] {txt}" if txt.strip() else f"[PDF第{i}页] [未提取到文本]")
-            if len(re.sub(r"\s","",txt))<80: scan.append({"page":i})
+        try: document=fitz.open(str(path))
+        except Exception as e: raise RuntimeError(f"PDF 打开失败：{path}：{e}") from e
+        try:
+            for i,page in enumerate(document,1):
+                txt=page.get_text("text") or ""
+                pages.append(f"[PDF第{i}页] {txt}" if txt.strip() else f"[PDF第{i}页] [未提取到文本]")
+                if len(re.sub(r"\s","",txt))<80: scan.append({"page":i})
+        finally:
+            document.close()
         return "\n".join(pages),scan
     raise RuntimeError(f"不支持的文件类型：{ext}")
 
@@ -183,23 +262,6 @@ def chat_json(client,model,system,user,max_tokens=6000):
             if attempt<retries: time.sleep(min(2**attempt,8))
     raise RuntimeError(f"AI 请求失败：{last}") from last
 
-def visual_ocr(path: Path,pages: list[dict[str,Any]]) -> str:
-    if not pages: return ""
-    client,model=make_client("MULTIMODAL")
-    try: import fitz
-    except ImportError as e: raise RuntimeError("扫描版 PDF 需要 PyMuPDF，请运行 pip install -r requirements.txt") from e
-    doc=fitz.open(str(path)); outputs=[]; limit=max(1,int(os.getenv("VISION_MAX_PAGES","30")))
-    for item in pages[:limit]:
-        n=item["page"]; pix=doc[n-1].get_pixmap(matrix=fitz.Matrix(1.5,1.5),alpha=False)
-        data=base64.b64encode(pix.tobytes("png")).decode("ascii")
-        image_prompt=f'文件：{path.name}；PDF第{n}页。返回 JSON：{{"page": {n}, "text": "页面文字，保留结构"}}'
-        messages=[{"role":"system","content":SYSTEM+"\n请从页面图像提取可辨认文字，尽量保留表格、条款号与字段位置。看不清写[无法辨认]，不可猜测。"},
-        {"role":"user","content":[{"type":"text","text":image_prompt},{"type":"image_url","image_url":{"url":"data:image/png;base64,"+data}}]}]
-        response=client.chat.completions.create(model=model,messages=messages,temperature=0,max_tokens=5000)
-        outputs.append(f"[PDF第{n}页 | 多模态提取]\n"+(response.choices[0].message.content or ""))
-    doc.close()
-    if len(pages)>limit: outputs.append(f"[提示] {len(pages)} 页需要视觉识别，本次仅处理前 {limit} 页。")
-    return "\n\n".join(outputs)
 
 def split_chunks(text,size=CHUNK_SIZE):
     result=[]
@@ -332,15 +394,17 @@ def main():
         if args.resume and cached.get("sha256")==digest and cached.get("result"):
             result=cached["result"]; print("  [缓存] 文件未变化，复用分析结果")
         else:
-            text,visual_pages=read_document(path)
-            if visual_pages and path.suffix.lower()==".pdf":
-                print(f"  [多模态] {len(visual_pages)} 页文本较少，尝试视觉提取")
-                try:
-                    visual=visual_ocr(path,visual_pages)
-                    if visual: text += "\n\n"+visual
-                except Exception as e:
-                    print(f"  [警告] 多模态提取失败：{e}",file=sys.stderr)
-                    text += f"\n\n[系统提示：部分扫描页未能进行视觉提取：{e}]"
+            if key == str(tender.resolve()):
+                print("  [纯 Python] 正在提取 PDF 文本并定位合同条款章节")
+                full_text=extract_pdf_text(path)
+                text=extract_contract_section(full_text)
+                section_path=input_dir/"招标文件_合同条款.txt"
+                section_path.write_text(text+"\n",encoding="utf-8")
+                print(f"  [纯 Python] 合同条款已保存：{section_path}")
+            else:
+                text,visual_pages=read_document(path)
+                if visual_pages:
+                    print(f"  [提示] {path.name} 有 {len(visual_pages)} 页文本层不足；按要求不调用 AI 视觉识别，这些页面可能无法提取。",file=sys.stderr)
             result=analyze_document(path,text,text_client,text_model)
             state[key]={"sha256":digest,"result":result}
             state_path.write_text(json.dumps(state,ensure_ascii=False,indent=2),encoding="utf-8")
