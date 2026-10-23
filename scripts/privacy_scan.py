@@ -212,7 +212,7 @@ def export_text(lines, source_path: Path, output_path: Path):
         loc = line.location or "位置未标记"
         page = f"第{line.page}页" if line.page != "未标页" else "页码未知"
         out.append(f"[{page} | {loc} | {line.source}] {line.text}")
-    output_path.write_text("\\n".join(out) + "\\n", encoding="utf-8")
+    output_path.write_text("\n".join(out) + "\n", encoding="utf-8")
 
 
 def main():
