@@ -56,6 +56,9 @@ def extract_pdf_text(pdf_path: Path) -> str:
         pages = [page.get_text("text") or "" for page in document]
     finally:
         document.close()
+    weak_pages = [index for index, page_text in enumerate(pages, 1) if len(re.sub(r"\s", "", page_text)) < 80]
+    if weak_pages:
+        print(f"[提示] PDF 有 {len(weak_pages)} 页文本层不足（页码：{', '.join(map(str, weak_pages[:30]))}）；按要求不调用 AI OCR，扫描页内容可能缺失。", file=sys.stderr)
     text = "\n".join(pages).replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"\n{4,}", "\n\n", text).strip()
     if not text:
