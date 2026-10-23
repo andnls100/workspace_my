@@ -308,29 +308,16 @@ def _render_notice_with_browser(url: str) -> str:
         return result
 
 
-def prepare_notice(value: str, input_dir: Path) -> Path:
-    """Read a local HTML/text notice or fetch an HTML public-notice URL and save visible text."""
-    if _is_http_url(value):
-        data, content_type, _ = _fetch_url(value)
-        if "html" not in content_type.lower() and not data.lstrip().lower().startswith((b"<!doctype html", b"<html", b"<")):
-            raise RuntimeError("公示地址返回的内容不像 HTML 页面；请提供可直接访问的公示 HTML URL")
-        html = data.decode("utf-8", errors="replace")
-        source_label = value
-    else:
-        path = Path(value).expanduser().resolve()
-        if not path.is_file():
-            raise RuntimeError(f"公示文件不存在：{path}")
-        if path.suffix.lower() not in {".html", ".htm", ".txt"}:
-            raise RuntimeError("公示文件只支持 HTML/HTM/TXT 或可访问的 HTML URL")
-        html = path.read_text(encoding="utf-8", errors="replace")
-        source_label = str(path)
-    parser = _VisibleHTMLText()
-    parser.feed(html)
-    visible = parser.text()
+def prepare_notice(input_dir: Path) -> Path:
+    """Read the public notice from notice.txt in the current working directory."""
+    path = Path.cwd() / "notice.txt"
+    if not path.is_file():
+        raise RuntimeError(f"公示文件不存在：{path}；请将公示正文保存为当前目录下的 notice.txt")
+    visible = path.read_text(encoding="utf-8-sig", errors="replace").strip()
     if len(visible) < 20:
-        raise RuntimeError("公示页面提取到的可见文字过少，可能需要登录、JavaScript 渲染或反爬验证")
+        raise RuntimeError(f"公示文件内容过少或为空：{path}")
     target = input_dir / "公示网页正文.txt"
-    target.write_text(f"公示来源：{source_label}\n\n{visible}\n", encoding="utf-8")
+    target.write_text(f"公示来源：{path.resolve()}\n\n{visible}\n", encoding="utf-8")
     return target
 
 def make_client(prefix: str):
@@ -596,7 +583,7 @@ def main():
     ap=argparse.ArgumentParser(description="招标文件、合同与中标公示三方比对 Agent")
     ap.add_argument("--tender",default="招标文件.pdf",help="招标文件本地路径或可直接下载的 HTTP(S) URL；默认当前目录下的 招标文件.pdf")
     ap.add_argument("--contract",default="合同.pdf",help="合同本地路径或可直接下载的 HTTP(S) URL；默认当前目录下的 合同.pdf")
-    ap.add_argument("--notice",required=True,help="必填：公示 HTML 网页 URL，或本地 HTML/HTM/TXT 文件路径")
+    ap.add_argument("--notice", action="store_true", help=argparse.SUPPRESS)  # 兼容旧命令；公示固定读取当前目录 notice.txt
     ap.add_argument("--out",default="./output",help="输出目录，默认 ./output")
     ap.add_argument("--resume",action="store_true",help="复用未变化文件的缓存结果")
     ap.add_argument("--no-scan",action="store_true",help="跳过本地隐私/空白初筛")
@@ -608,7 +595,7 @@ def main():
     try:
         tender=prepare_document(args.tender,"招标文件",input_dir)
         contract=prepare_document(args.contract,"合同",input_dir)
-        notice=prepare_notice(args.notice,input_dir)
+        notice=prepare_notice(input_dir)
     except RuntimeError as exc:
         ap.error(str(exc))
     files=[tender,contract,notice]
