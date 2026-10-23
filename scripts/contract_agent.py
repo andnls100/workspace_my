@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Portable CLI agent for tender/contract review. AI output is advisory and requires human review."""
 from __future__ import annotations
-import argparse, base64, hashlib, json, os, re, sys, time
+import argparse, base64, hashlib, json, os, re, sys, time, urllib.request, urllib.parse
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 try:
@@ -65,6 +66,99 @@ def read_document(path: Path) -> tuple[str,list[dict[str,Any]]]:
             if len(re.sub(r"\s","",txt))<80: scan.append({"page":i})
         return "\n".join(pages),scan
     raise RuntimeError(f"不支持的文件类型：{ext}")
+
+
+class _VisibleHTMLText(HTMLParser):
+    """Extract visible text from HTML, excluding scripts/styles and hidden metadata."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.skip_depth = 0
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() in {"script", "style", "noscript", "svg", "template"}:
+            self.skip_depth += 1
+        elif tag.lower() in {"br", "p", "div", "li", "tr", "td", "th", "h1", "h2", "h3", "h4"} and not self.skip_depth:
+            self.parts.append("\n")
+    def handle_endtag(self, tag):
+        if tag.lower() in {"script", "style", "noscript", "svg", "template"} and self.skip_depth:
+            self.skip_depth -= 1
+        elif tag.lower() in {"p", "div", "li", "tr", "td", "th", "h1", "h2", "h3", "h4"} and not self.skip_depth:
+            self.parts.append("\n")
+    def handle_data(self, data):
+        if not self.skip_depth and data.strip():
+            self.parts.append(data.strip() + " ")
+    def text(self):
+        return re.sub(r"[ \t]+\n", "\n", re.sub(r"\n{3,}", "\n\n", "".join(self.parts))).strip()
+
+def _is_http_url(value: str) -> bool:
+    parsed = urllib.parse.urlparse(value)
+    return parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc)
+
+def _fetch_url(url: str) -> tuple[bytes, str, str]:
+    if not _is_http_url(url):
+        raise RuntimeError(f"只支持 http/https 网络地址：{url}")
+    request = urllib.request.Request(url, headers={"User-Agent": "TenderContractReviewAgent/1.0"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = response.read(100 * 1024 * 1024 + 1)
+            if len(data) > 100 * 1024 * 1024:
+                raise RuntimeError("下载文件超过 100 MB 限制")
+            return data, response.headers.get("Content-Type", ""), response.headers.get("Content-Disposition", "")
+    except Exception as exc:
+        if isinstance(exc, RuntimeError):
+            raise
+        raise RuntimeError(f"无法下载地址 {url}：{exc}") from exc
+
+def _filename_from_response(url: str, content_disposition: str, content_type: str, default: str) -> str:
+    match = re.search(r'filename\\*?=(?:UTF-8\\'\\'|")?([^";]+)', content_disposition, re.I)
+    candidate = urllib.parse.unquote(match.group(1).strip().strip('"')) if match else Path(urllib.parse.urlparse(url).path).name
+    suffix = Path(candidate).suffix.lower()
+    if suffix not in SUPPORTED:
+        ctype = content_type.lower()
+        suffix = ".pdf" if "pdf" in ctype else ".docx" if "wordprocessingml" in ctype else ".txt" if "text/plain" in ctype else ""
+    if suffix not in SUPPORTED:
+        raise RuntimeError(f"无法判断下载文件类型（仅支持 PDF/DOCX/TXT）：{url}")
+    return default + suffix
+
+def prepare_document(value: str, kind: str, input_dir: Path) -> Path:
+    """Resolve a local supported document path or download an HTTP(S) document."""
+    if _is_http_url(value):
+        data, content_type, disposition = _fetch_url(value)
+        filename = _filename_from_response(value, disposition, content_type, kind)
+        target = input_dir / filename
+        target.write_bytes(data)
+        return target
+    path = Path(value).expanduser().resolve()
+    if not path.is_file():
+        raise RuntimeError(f"{kind}文件不存在或不是文件：{path}")
+    if path.suffix.lower() not in SUPPORTED:
+        raise RuntimeError(f"{kind}文件只支持 PDF/DOCX/TXT：{path}")
+    return path
+
+def prepare_notice(value: str, input_dir: Path) -> Path:
+    """Read a local HTML/text notice or fetch an HTML public-notice URL and save visible text."""
+    if _is_http_url(value):
+        data, content_type, _ = _fetch_url(value)
+        if "html" not in content_type.lower() and not data.lstrip().lower().startswith((b"<!doctype html", b"<html", b"<")):
+            raise RuntimeError("公示地址返回的内容不像 HTML 页面；请提供可直接访问的公示 HTML URL")
+        html = data.decode("utf-8", errors="replace")
+        source_label = value
+    else:
+        path = Path(value).expanduser().resolve()
+        if not path.is_file():
+            raise RuntimeError(f"公示文件不存在：{path}")
+        if path.suffix.lower() not in {".html", ".htm", ".txt"}:
+            raise RuntimeError("公示文件只支持 HTML/HTM/TXT 或可访问的 HTML URL")
+        html = path.read_text(encoding="utf-8", errors="replace")
+        source_label = str(path)
+    parser = _VisibleHTMLText()
+    parser.feed(html)
+    visible = parser.text()
+    if len(visible) < 20:
+        raise RuntimeError("公示页面提取到的可见文字过少，可能需要登录、JavaScript 渲染或反爬验证")
+    target = input_dir / "公示网页正文.txt"
+    target.write_text(f"公示来源：{source_label}\n\n{visible}\n", encoding="utf-8")
+    return target
 
 def make_client(prefix: str):
     if OpenAI is None: raise RuntimeError("缺少 openai SDK，请运行 pip install -r requirements.txt")
@@ -191,7 +285,7 @@ def write_report(out_dir,results,cross,scans):
     out += ["","## 5. 隐私与空白初筛"]
     for s in scans: out.append(f"- {s['source']}：隐私候选 {s['privacy_count']} 项；空白候选 {s['blank_count']} 项。详情见 scans/{s['report']}。")
     if not scans: out.append("- 未执行原始文件扫描。")
-    out += ["","## 6. 限制与人工复核","- OCR/多模态提取可能漏字、错字或误读表格；应人工复核原始页面。","- 未提供公示 URL 时不会自动联网检索公示。","- 价格、期限、付款、责任、担保、争议解决及材料冲突应优先人工复核。","- 自动判断不是法律意见。","","## 7. 合同未填写及缺失信息清单（最后一章）","| 文件 | 位置 | 类别 | 原文/证据 | 风险 | 建议 |","|---|---|---|---|---|---|"]
+    out += ["","## 6. 限制与人工复核","- OCR/多模态提取可能漏字、错字或误读表格；应人工复核原始页面。","- 公示 HTML 通过普通 HTTP 请求提取可见文本；登录验证、反爬或 JavaScript 动态渲染页面可能无法完整读取。","- 价格、期限、付款、责任、担保、争议解决及材料冲突应优先人工复核。","- 自动判断不是法律意见。","","## 7. 合同未填写及缺失信息清单（最后一章）","| 文件 | 位置 | 类别 | 原文/证据 | 风险 | 建议 |","|---|---|---|---|---|---|"]
     any_blank=False
     for s in scans:
         for item in s.get("blanks",[]):
@@ -201,21 +295,40 @@ def write_report(out_dir,results,cross,scans):
     (out_dir/"report.md").write_text("\n".join(out)+"\n",encoding="utf-8")
 
 def main():
-    ap=argparse.ArgumentParser(description="轻量级招标合同审核 AI Agent（PDF/DOCX/TXT）")
-    ap.add_argument("input",help="待审核文件或包含多个材料的目录"); ap.add_argument("--out",default="audit_output",help="输出目录，默认 audit_output")
-    ap.add_argument("--resume",action="store_true",help="复用未变化文件的缓存结果"); ap.add_argument("--no-scan",action="store_true",help="跳过本地隐私/空白初筛")
-    args=ap.parse_args(); source=Path(args.input).expanduser().resolve(); out=Path(args.out).expanduser().resolve()
-    if not source.exists(): ap.error(f"输入路径不存在：{source}")
-    files=[source] if source.is_file() else sorted(p for p in source.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED)
-    files=[p for p in files if p.suffix.lower() in SUPPORTED]
-    if not files: ap.error("输入位置没有找到 PDF、DOCX 或 TXT 文件")
-    out.mkdir(parents=True,exist_ok=True); state_path=out/".agent_state.json"; state={}
+    ap=argparse.ArgumentParser(description="招标文件、合同与中标公示三方比对 Agent")
+    ap.add_argument("--tender",default="招标文件.pdf",help="招标文件本地路径或可直接下载的 HTTP(S) URL；默认当前目录下的 招标文件.pdf")
+    ap.add_argument("--contract",default="合同.pdf",help="合同本地路径或可直接下载的 HTTP(S) URL；默认当前目录下的 合同.pdf")
+    ap.add_argument("--notice",required=True,help="必填：公示 HTML 网页 URL，或本地 HTML/HTM/TXT 文件路径")
+    ap.add_argument("--out",default="./output",help="输出目录，默认 ./output")
+    ap.add_argument("--resume",action="store_true",help="复用未变化文件的缓存结果")
+    ap.add_argument("--no-scan",action="store_true",help="跳过本地隐私/空白初筛")
+    args=ap.parse_args()
+    out=Path(args.out).expanduser().resolve()
+    out.mkdir(parents=True,exist_ok=True)
+    input_dir=out/".inputs"
+    input_dir.mkdir(parents=True,exist_ok=True)
+    try:
+        tender=prepare_document(args.tender,"招标文件",input_dir)
+        contract=prepare_document(args.contract,"合同",input_dir)
+        notice=prepare_notice(args.notice,input_dir)
+    except RuntimeError as exc:
+        ap.error(str(exc))
+    files=[tender,contract,notice]
+    # Deduplicate identical local paths while preserving the requested document order.
+    unique_files=[]
+    seen=set()
+    for path in files:
+        resolved=str(path.resolve())
+        if resolved not in seen:
+            seen.add(resolved); unique_files.append(path)
+    state_path=out/".agent_state.json"; state={}
     if args.resume and state_path.exists():
         try: state=json.loads(state_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError,OSError): state={}
     text_client,text_model=make_client("TEXT"); results=[]; scans=[]
-    for path in files:
-        print(f"[读取] {path.name}"); digest=sha256_file(path); key=str(path); cached=state.get(key,{})
+    for path in unique_files:
+        print(f"[读取] {path.name}")
+        digest=sha256_file(path); key=str(path.resolve()); cached=state.get(key,{})
         if args.resume and cached.get("sha256")==digest and cached.get("result"):
             result=cached["result"]; print("  [缓存] 文件未变化，复用分析结果")
         else:
@@ -226,7 +339,8 @@ def main():
                     visual=visual_ocr(path,visual_pages)
                     if visual: text += "\n\n"+visual
                 except Exception as e:
-                    print(f"  [警告] 多模态提取失败：{e}",file=sys.stderr); text += f"\n\n[系统提示：部分扫描页未能进行视觉提取：{e}]"
+                    print(f"  [警告] 多模态提取失败：{e}",file=sys.stderr)
+                    text += f"\n\n[系统提示：部分扫描页未能进行视觉提取：{e}]"
             result=analyze_document(path,text,text_client,text_model)
             state[key]={"sha256":digest,"result":result}
             state_path.write_text(json.dumps(state,ensure_ascii=False,indent=2),encoding="utf-8")
@@ -235,7 +349,8 @@ def main():
     cross=cross_compare(results,text_client,text_model)
     (out/"fields_and_findings.json").write_text(json.dumps({"documents":results,"cross_file_review":cross},ensure_ascii=False,indent=2),encoding="utf-8")
     write_report(out,results,cross,scans)
-    print(f"[完成] 报告：{out/'report.md'}"); print(f"[完成] 结构化结果：{out/'fields_and_findings.json'}")
+    print(f"[完成] 报告：{out/'report.md'}")
+    print(f"[完成] 结构化结果：{out/'fields_and_findings.json'}")
     return 0
 
 if __name__=="__main__":
