@@ -1,24 +1,29 @@
 {
-  "name": "tender-contract-audit-skill",
-  "version": "1.3.0",
-  "purpose": "双路径招标合同审核：原始 PDF/DOCX 隐私与空白扫描，TXT 关键字段提取、合同内部逻辑检查及跨文件比对",
+  "name": "tender-contract-audit-agent",
+  "version": "2.0.0",
+  "purpose": "便携式 Python CLI 招标合同审核 Agent，结合本地隐私/空白扫描、远程文本 AI 和可选多模态 PDF 页面识别",
   "language": "zh-CN",
   "files": [
     "SKILL.md",
     "README.md",
     "MANIFEST.json",
+    ".env.example",
+    ".gitignore",
+    "requirements.txt",
+    "scripts/contract_agent.py",
+    "scripts/privacy_scan.py",
     "references/field-checklist.md",
     "references/report-template.md",
-    "scripts/privacy_scan.py",
+    "tests/test_contract_agent.py",
     "tests/test_privacy_scan.py"
   ],
   "changes": [
-    "默认材料属于同一项目，删除单独的项目归属判断步骤",
-    "新增原始 PDF/DOCX 与 TXT 条款分析双路径工作流",
-    "新增带页码/段落/表格位置标记的 TXT 导出功能",
-    "统一提取关键字段并复用结构化证据，减少重复提取",
-    "新增合同内部错别字、金额、日期、主体和条款逻辑检查规则",
-    "优化跨文件比对、问题去重和定向复核流程",
-    "更新审核字段清单、报告模板和回归测试"
+    "保留原有招标合同审核规则、字段清单、报告模板和本地隐私/空白扫描",
+    "新增可从任意工作目录调用的 Python CLI Agent",
+    "分别配置 OpenAI 兼容文本 API 与多模态 API",
+    "自动使用文本 API 分析条款，仅对文本层不足的 PDF 页面尝试多模态识别",
+    "统一提取关键字段、检查合同内部错误并执行跨文件比对",
+    "新增本地常见个人信息脱敏、结构化 JSON 输出、重试和断点续跑",
+    "新增 Agent 工具测试与安装/配置文档"
   ]
 }

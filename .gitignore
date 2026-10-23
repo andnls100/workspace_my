@@ -1,0 +1,6 @@
+.env
+audit_output/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
