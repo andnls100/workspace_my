@@ -45,25 +45,25 @@ MULTIMODAL_MODEL=支持图像输入的模型名称
 审核单个文件：
 
 ```bash
-python scripts/contract_agent.py "D:\\合同材料\\合同.pdf" --out "D:\\审核结果"
+python scripts/contract_agent.py "D:/合同材料/合同.pdf" --out "D:/审核结果"
 ```
 
 审核一个目录内所有 PDF/DOCX/TXT：
 
 ```bash
-python scripts/contract_agent.py "D:\\合同材料" --out "D:\\审核结果"
+python scripts/contract_agent.py "D:/合同材料" --out "D:/审核结果"
 ```
 
 断点续跑：
 
 ```bash
-python scripts/contract_agent.py "D:\\合同材料" --out "D:\\审核结果" --resume
+python scripts/contract_agent.py "D:/合同材料" --out "D:/审核结果" --resume
 ```
 
 跳过本地隐私与空白初筛：
 
 ```bash
-python scripts/contract_agent.py "D:\\合同材料" --no-scan
+python scripts/contract_agent.py "D:/合同材料" --no-scan
 ```
 
 ## 输出文件
