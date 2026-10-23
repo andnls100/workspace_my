@@ -72,12 +72,15 @@ def find_all_chapters(text: str) -> list[dict[str, Any]]:
     for line in text.splitlines(keepends=True):
         stripped = line.strip()
         heading = re.sub(r"^\[[^\]]+\]\s*", "", stripped)
-        match = CHAPTER_PATTERN.match(heading)
+        # 标题匹配时去除所有空白，兼容“合 同 条 款”等 PDF 提取结果。
+        normalized_heading = re.sub(r"\s+", "", heading)
+        normalized_stripped = re.sub(r"\s+", "", stripped)
+        match = CHAPTER_PATTERN.match(normalized_heading)
         if match:
             title = f"第{match.group(1)}章 {match.group(2).strip()}".strip()
             toc = bool(
-                re.search(r"\.{3,}|…{2,}|合同条款\s*\d{1,4}$", stripped)
-                or re.search(r"\s\d{1,4}\s*$", stripped)
+                re.search(r"\.{3,}|…{2,}|合同条款\d{1,4}$", normalized_stripped)
+                or re.search(r"\d{1,4}$", normalized_stripped)
             )
             chapters.append({
                 "number": match.group(1),
