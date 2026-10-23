@@ -292,6 +292,22 @@ def prepare_document(value: str, kind: str, input_dir: Path) -> Path:
         raise RuntimeError(f"{kind}文件只支持 PDF/DOCX/TXT：{path}")
     return path
 
+def _render_notice_with_browser(url: str) -> str:
+    """Read dynamically rendered notice text with Playwright."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise RuntimeError("动态公示页需要 Playwright：pip install playwright；python -m playwright install chromium") from exc
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(4000)
+        result = page.locator("body").inner_text()
+        browser.close()
+        return result
+
+
 def prepare_notice(value: str, input_dir: Path) -> Path:
     """Read a local HTML/text notice or fetch an HTML public-notice URL and save visible text."""
     if _is_http_url(value):
