@@ -35,5 +35,18 @@ class AgentUtilityTests(unittest.TestCase):
             self.assertIn('[第2行] 第二条', text)
             self.assertEqual(visual_pages, [])
 
+    def test_html_text_extraction_skips_scripts_and_styles(self):
+        parser = agent._VisibleHTMLText()
+        parser.feed("<html><body><h1>中标公示</h1><p>中标金额：100万元</p><script>fake secret</script><style>.x{}</style></body></html>")
+        text = parser.text()
+        self.assertIn("中标公示", text)
+        self.assertIn("中标金额：100万元", text)
+        self.assertNotIn("fake secret", text)
+        self.assertNotIn(".x{}", text)
+
+    def test_url_validation_and_download_extension(self):
+        self.assertTrue(agent._is_http_url("https://example.com/tender.pdf"))
+        self.assertFalse(agent._is_http_url("file:///tmp/tender.pdf"))
+        self.assertEqual(agent._filename_from_response("https://example.com/download", 'attachment; filename="bid.pdf"', "application/pdf", "招标文件"), "招标文件.pdf")
 if __name__ == '__main__':
     unittest.main()
