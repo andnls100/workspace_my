@@ -68,7 +68,8 @@ def find_all_chapters(text: str) -> list[dict[str, Any]]:
     offset = 0
     for line in text.splitlines(keepends=True):
         stripped = line.strip()
-        match = CHAPTER_PATTERN.match(stripped)
+        heading = re.sub(r"^\[[^\]]+\]\s*", "", stripped)
+        match = CHAPTER_PATTERN.match(heading)
         if match:
             title = f"第{match.group(1)}章 {match.group(2).strip()}".strip()
             toc = bool(
@@ -403,6 +404,10 @@ def main():
                 print(f"  [纯 Python] 合同条款已保存：{section_path}")
             else:
                 text,visual_pages=read_document(path)
+                if key == str(contract.resolve()):
+                    contract_text_path=input_dir/"合同_提取文本.txt"
+                    contract_text_path.write_text(text+"\n",encoding="utf-8")
+                    print(f"  [纯 Python] 合同文本已保存：{contract_text_path}")
                 if visual_pages:
                     print(f"  [提示] {path.name} 有 {len(visual_pages)} 页文本层不足；按要求不调用 AI 视觉识别，这些页面可能无法提取。",file=sys.stderr)
             result=analyze_document(path,text,text_client,text_model)
