@@ -25,7 +25,7 @@ def main() -> int:
         cmd=[sys.executable,*module_args]
         if name=="generate_teacher_data" and args.limit>0:
             cmd.extend(["--limit",str(args.limit)])
-        print("\\n>>> "+" ".join(cmd),flush=True)
+        print("\n>>> "+" ".join(cmd),flush=True)
         result=subprocess.run(cmd,cwd=ROOT)
         if result.returncode:
             print(f"[停止] {name} 退出码 {result.returncode}；修复问题后可重跑，已生成样本会断点续跑。",file=sys.stderr)
