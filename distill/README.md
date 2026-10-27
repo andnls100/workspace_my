@@ -33,8 +33,12 @@ python -m distill.scripts.prepare_data
 python -m distill.scripts.generate_teacher_data
 python -m distill.scripts.validate_dataset
 python -m distill.scripts.build_dataset
+# 一键执行上述步骤（先检查 API；失败即停止）
+python -m distill.scripts.run_pipeline --limit 3
 ```
 可通过 `--limit N` 限制 API 样本数。生成任务和结果采用 JSONL，已完成任务可断点续跑。
+
+先用 `--limit 1` 做小规模连通性试跑，确认输出后再增加数量。流水线不会自动启动模型训练；必须先人工抽检训练样本。
 
 输出：
 - `distill/data/tasks.jsonl`: 教师任务
