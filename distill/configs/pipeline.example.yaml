@@ -1,0 +1,20 @@
+# Copy to pipeline.yaml locally; do not commit secrets or real contract data.
+teacher:
+  provider: deepseek
+  base_url: https://api.deepseek.com
+  model_env: DEEPSEEK_MODEL
+generation:
+  max_output_tokens: 6000
+  temperature: 0.1
+  sleep_seconds: 0.5
+data:
+  input_dir: distill/data/input
+  output_dir: distill/data
+  max_chars_per_chunk: 12000
+validation:
+  require_source_and_quote: true
+  require_manual_review_for_legal_conclusions: true
+training:
+  framework: LLaMA-Factory
+  student_model: set-locally-after-hardware-selection
+  method: lora
