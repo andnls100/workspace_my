@@ -57,7 +57,7 @@ distill/data/input/
 先用一个项目验证配置与输出：
 
 ```bash
-python -m distill.scripts.run_pipeline --limit 1
+python -m distill.scripts.run_pipeline --limit 1 --skip-build
 ```
 
 确认 API 输出、证据和质量报告后，再去掉限制或设置较大的 `--limit`：
@@ -66,7 +66,9 @@ python -m distill.scripts.run_pipeline --limit 1
 python -m distill.scripts.run_pipeline
 ```
 
-`--limit N` 只限制本次教师 API 调用数量；`--skip-api-check` 可跳过 API 连通性检查。任务和生成结果按 task ID 断点续跑。
+只有在已积累足够多的独立项目、且希望生成训练/验证文件时才运行完整构建步骤。
+
+`--limit N` 只限制本次教师 API 调用数量；`--skip-api-check` 可跳过 API 连通性检查；`--skip-build` 只执行数据准备、生成、校验和报告，不拆分训练集，适合少量样本试跑。任务和生成结果按 task ID 断点续跑。
 
 ### 分步运行
 
