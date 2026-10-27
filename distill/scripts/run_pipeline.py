@@ -16,6 +16,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Prepare, generate, validate, report and build contract-review distillation data.")
     ap.add_argument("--limit", type=int, default=0, help="本次最多请求多少个教师任务")
     ap.add_argument("--skip-api-check", action="store_true", help="跳过 API 连通性检查")
+    ap.add_argument("--skip-build", action="store_true", help="仅试跑/评估时跳过训练集拆分")
     args = ap.parse_args()
     if args.limit < 0:
         ap.error("--limit 必须大于或等于 0")
@@ -25,6 +26,9 @@ def main() -> int:
         if result.returncode:
             return result.returncode
     for name, module_args in STEPS:
+        if name == "build_dataset" and args.skip_build:
+            print("\n>>> 跳过 build_dataset（--skip-build）", flush=True)
+            continue
         cmd = [sys.executable, *module_args]
         if name == "generate_teacher_data" and args.limit > 0:
             cmd.extend(["--limit", str(args.limit)])
@@ -33,7 +37,7 @@ def main() -> int:
         if result.returncode:
             print(f"[停止] {name} 退出码 {result.returncode}；修复问题后可重跑，已生成样本会断点续跑。", file=sys.stderr)
             return result.returncode
-    print("流水线完成。请查看 distill/data/evaluation_report.json，并人工抽检样本；报告不证明法律结论正确。")
+    print("流水线完成。请查看 distill/data/evaluation_report.json 并人工抽检；报告不证明法律结论正确。")
     return 0
 
 
