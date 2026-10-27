@@ -1,0 +1,11 @@
+# Local contract materials, API keys, generated samples and model artifacts
+.env
+data/
+*.jsonl
+*.pdf
+*.docx
+*.txt
+*.html
+*.htm
+models/
+checkpoints/
