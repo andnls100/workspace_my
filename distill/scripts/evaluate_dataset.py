@@ -82,6 +82,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="评估合同审查教师输出并生成 JSON 报告")
     parser.add_argument("--input", default=str(DATA / "generated.jsonl"))
     parser.add_argument("--gold", help="可选：人工核验标准答案 JSONL，每行包含 project_id 和 answer")
+    parser.add_argument("--validated", default=str(DATA / "validated.jsonl"), help="通过基础校验的样本文件")
+    parser.add_argument("--rejected", default=str(DATA / "rejected.jsonl"), help="未通过基础校验的样本文件")
     parser.add_argument("--output", default=str(DATA / "evaluation_report.json"))
     args = parser.parse_args()
     input_path = Path(args.input)
@@ -89,7 +91,9 @@ def main() -> int:
         print(f"找不到输入文件：{input_path}")
         return 2
     rows = read_jsonl(input_path)
-    statuses = Counter(str(r.get("validation_status", "unknown")) for r in rows)
+    validated_rows = read_jsonl(Path(args.validated))
+    rejected_rows = read_jsonl(Path(args.rejected))
+    statuses = Counter({"candidate_pass": len(validated_rows), "rejected": len(rejected_rows)})
     field_statuses, finding_severities, schema_issues = Counter(), Counter(), Counter()
     quote_checks = {"with_evidence": 0, "exact_quote_found": 0, "quote_missing_or_not_found": 0}
     projects = set()
