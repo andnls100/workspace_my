@@ -6,6 +6,17 @@ from .common import DATA, ROOT, write_jsonl
 
 SUPPORTED = {".pdf", ".docx", ".txt", ".html", ".htm"}
 
+def redact_for_remote(text: str) -> str:
+    """Basic pattern-based PII masking. This is not a complete confidentiality review."""
+    text = re.sub(r"(?<!\\d)(1[3-9]\\d)(?:[\\s-]?\\d){4}([\\s-]?\\d{4})(?!\\d)", r"\\1****\\2", text)
+    text = re.sub(r"(?<![0-9Xx])\\d{17}[0-9Xx](?![0-9Xx])|(?<!\\d)\\d{15}(?!\\d)",
+                  lambda m: m.group(0)[:3] + "*" * (len(m.group(0))-7) + m.group(0)[-4:], text)
+    text = re.sub(r"(?i)((?:银行账号|银行卡号|收款账号|开户账号|个人账户|账号)\\s*[:：]?\\s*)([\\d -]{8,32})",
+                  lambda m: m.group(1) + re.sub(r"\\D", "", m.group(2))[:4] + "****" + re.sub(r"\\D", "", m.group(2))[-4:], text)
+    text = re.sub(r"(?i)(QQ号|QQ号码|QQ\\s*[:：]\\s*)(\\d{5,12})",
+                  lambda m: m.group(1) + m.group(2)[:2] + "****" + m.group(2)[-2:], text)
+    return text
+
 def extract(path: Path) -> list[dict]:
     ext = path.suffix.lower()
     if ext == ".pdf":
@@ -56,7 +67,7 @@ def main() -> int:
                 text=page["text"]
                 # 保留来源；超长内容切块。跨文件对比需在生成阶段明确标记上下文不完整。
                 for offset in range(0, len(text), args.max_chars):
-                    chunk=text[offset:offset+args.max_chars]
+                    chunk=redact_for_remote(text[offset:offset+args.max_chars])
                     if not chunk.strip(): continue
                     documents.append({"source":str(path.relative_to(input_dir)), "page":page["page"], "chunk_index":offset//args.max_chars, "text":chunk})
         if not documents:
