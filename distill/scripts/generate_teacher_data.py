@@ -1,6 +1,6 @@
 """Generate candidate SFT examples using the configured remote DeepSeek model."""
 from __future__ import annotations
-import argparse, os, time
+import argparse, json, os, time
 from pathlib import Path
 from .common import DATA, read_jsonl, write_jsonl, load_env
 
@@ -34,22 +34,21 @@ def main() -> int:
     if args.limit>0: pending=pending[:args.limit]
     print(f"总任务 {len(tasks)}，已完成 {len(done)}，本次处理 {len(pending)}")
     for index,task in enumerate(pending,1):
-        docs=task.get("documents",[])
-        # 原文可能含敏感信息；只有完成脱敏和授权后才应运行本脚本。
-        payload={"project_id":task.get("project_id"),"documents":docs,"instruction":task.get("instruction","")}
+        # 保留原始输入以供证据校验和学生模型训练，切勿把生成答案单独作为训练样本。
+        payload={"project_id":task.get("project_id"),"documents":task.get("documents",[]),"instruction":task.get("instruction","")}
         try:
             response=client.chat.completions.create(
                 model=model,
-                messages=[{"role":"system","content":SYSTEM},{"role":"user","content":__import__("json").dumps(payload,ensure_ascii=False)}],
+                messages=[{"role":"system","content":SYSTEM},{"role":"user","content":json.dumps(payload,ensure_ascii=False)}],
                 temperature=0.1,
                 max_tokens=args.max_output_tokens,
                 response_format={"type":"json_object"},
             )
             content=response.choices[0].message.content or ""
-            import json
             parsed=json.loads(content)
+            usage=getattr(response,"usage",None)
             record={"task_id":task.get("task_id"),"project_id":task.get("project_id"),"teacher_model":getattr(response,"model",model),
-                    "usage":getattr(response,"usage",None).model_dump() if getattr(response,"usage",None) else None,"answer":parsed,"validation_status":"pending"}
+                    "usage":usage.model_dump() if usage else None,"input":payload,"answer":parsed,"validation_status":"pending"}
             write_jsonl(out,[record],append=True)
             print(f"[{index}/{len(pending)}] 完成 {task.get('task_id')}")
         except Exception as exc:
